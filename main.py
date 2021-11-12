@@ -14,6 +14,11 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 idList = []
 linkList = []
 errorList = []
+errorPattern = ["error_no_fb_url",
+                "error_ambassador_fb_company",
+                "error_ambassador_fb_position",
+                "error_ambassador_fb_company_url",
+                "error_ambassador_fb_mfi_url"]
 try:
     connection = mysql.connector.connect(host='socratka.mysql.tools',
                                          database='socratka_test20210303mfi',
@@ -21,9 +26,9 @@ try:
                                          password='66sOZEbo2Vp466sOZEbo2Vp4')
     if connection.is_connected():
         select_ambassadors = "SELECT T1.user_id, T2.meta_value FROM(SELECT * FROM " \
-                             "socratka_test20210303mfi.wp_usermeta WHERE " \
+                             "wp_usermeta WHERE " \
                              "meta_key = 'social_facebook') AS T2 RIGHT JOIN (SELECT * FROM (SELECT * FROM " \
-                             "socratka_test20210303mfi.wp_usermeta WHERE meta_key = 'wp_capabilities') AS T WHERE " \
+                             "wp_usermeta WHERE meta_key = 'wp_capabilities') AS T WHERE " \
                              "meta_value LIKE '%ambassador%') AS T1 ON T1.user_id = T2.user_id "
         with connection.cursor() as cursor:
             cursor.execute(select_ambassadors)
@@ -41,7 +46,7 @@ except Error as e:
 
 op = webdriver.ChromeOptions()
 op.add_argument('headless')
-driver = webdriver.Chrome(executable_path="chromeDriver/chromedriver2",options=op)
+driver = webdriver.Chrome(executable_path="chromeDriver/chromedriver2", options=op)
 
 driver.get("https://www.facebook.com/")
 email = driver.find_element_by_css_selector("input[name='email']")
@@ -59,7 +64,7 @@ for i, user in enumerate(linkList):
     isWorkEqual = False
     isWorkLink = False
     isLink = False
-    error = ""
+    userErrorList = []  # добавил, удалил errorList выше
     if not user == "None":
         isFBLink = True
         driver.get(user)
@@ -81,7 +86,8 @@ for i, user in enumerate(linkList):
                 "a8c37x1j keod5gw0 nxhoafnm aigsh9s9 d9wwppkn fe6kdd0r mau55g9w c8b282yb "
                 "iv3no6db jq4qci2q a3bd9o3v b1v8xokw oo9gr5id hzawbc8m']")
 
-            if workEqual.text.__contains__("Ambassador в Investments.mentorsflow.com"):
+            if workEqual.text.__contains__("Ambassador в Investments.mentorsflow.com") or workEqual.text.__contains__(
+                    "Co-Founder/Owner в Investments.mentorsflow.com"):
                 isWorkEqual = True
         except NoSuchElementException as e:
             isWorkEqual = False
@@ -108,42 +114,61 @@ for i, user in enumerate(linkList):
         isFBLink = False
 
     if not isFBLink:
-        print("error_fb_url")
-        errorList.append("error_fb_url")
-    elif not isWork:
+        print("error_no_fb_url")
+        userErrorList.append(1)
+    else:
+        userErrorList.append(0)
+
+    if not isWork:
         print("error_ambassador_fb_company")
-        errorList.append("error_ambassador_fb_company")
-    elif not isWorkEqual:
+        userErrorList.append(1)
+    else:
+        userErrorList.append(0)
+
+    if not isWorkEqual:
         print("error_ambassador_fb_position")
-        errorList.append("error_ambassador_fb_position")
-    elif not isWorkLink:
+        userErrorList.append(1)
+    else:
+        userErrorList.append(0)
+
+    if not isWorkLink:
         print("error_ambassador_fb_company_url")
-        errorList.append("error_ambassador_fb_company_url")
-    elif not isLink:
+        userErrorList.append(1)
+    else:
+        userErrorList.append(0)
+
+    if not isLink:
         print("error_ambassador_fb_mfi_url")
-        errorList.append("error_ambassador_fb_mfi_url")
-    elif isFBLink and isWork and isWorkEqual and isWorkLink and isLink:
-        print("success_ambassador_fb")
-        errorList.append("success_ambassador_fb")
+        userErrorList.append(1)
+    else:
+        userErrorList.append(0)
+
+    # if isFBLink and isWork and isWorkEqual and isWorkLink and isLink:
+    #     print("success_ambassador_fb")
+    #     userErrorList.append(1)
+    # else:
+    #     userErrorList.append(0)
+    errorList.append(userErrorList)
 driver.close()
 
 try:
     if connection.is_connected():
-        select_ambassadors = "DELETE FROM socratka_test20210303mfi.wp_usermeta WHERE meta_key LIKE " \
+        select_ambassadors = "DELETE FROM wp_usermeta WHERE meta_key LIKE " \
                              "'%ambassador_verified%' "
         with connection.cursor() as cursor:
             cursor.execute(select_ambassadors)
             connection.commit()
 
             for i, id in enumerate(idList):
+                for j, err in enumerate(errorList[i]):
+                    if connection.is_connected():
+                        select_ambassadors = "INSERT INTO wp_usermeta(user_id, meta_key, meta_value) " \
+                                             "VALUES " \
+                                             "(%s, '%s', '%s')" % (idList[i], errorPattern[j], err)
 
-                if connection.is_connected():
-                    select_ambassadors = "INSERT INTO socratka_test20210303mfi.wp_usermeta(user_id, meta_key, meta_value) " \
-                                         "VALUES " \
-                                         "(%s, 'ambassador_verified', '%s')" % (idList[i], errorList[i])
-                    with connection.cursor() as cursor:
-                        cursor.execute(select_ambassadors)
-                        connection.commit()
+                        with connection.cursor() as cursor:
+                            cursor.execute(select_ambassadors)
+                            connection.commit()
 except Error as e:
     print("Error while connecting to MySQL", e)
 
